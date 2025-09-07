@@ -14,6 +14,7 @@ struct prefix_sum_args_t {
   int                t_id;
   int (*op)(int, int, int);
   int n_loops;
+ pthread_barrier_t barrier;
 };
 
 prefix_sum_args_t* alloc_args(int n_threads);
