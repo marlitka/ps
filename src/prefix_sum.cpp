@@ -16,29 +16,29 @@ void* compute_prefix_sum(void *a)
     for(int j=1;j<n;j+=2)
     {
         int i=args->t_id*n+j;
-        args->output_vals[i] = args->input_vals[i-1]+args->input_vals[i];
+        args->output_vals[i] = args->op(args->input_vals[i-1], args->input_vals[i], args->n_loops);
     }
     pthread_barrier_wait(args->barrier);
     // w:
     for(int j=3;j<n;j+=4)
     {
         int i=args->t_id*n+j;
-        args->output_vals[i] = args->output_vals[i-2]+args->output_vals[i];        
+        args->output_vals[i] = args->op(args->output_vals[i-2], args->output_vals[i], args->n_loops);     
     }
     pthread_barrier_wait(args->barrier);
     // y
     for(int j=0;j<n/4;j++)
     {
-        int shift = j*4;
+        int shift = j*4+args->t_id*n;
         int prefix = 0;
-        if(args->t_id >0)
+        if(shift >0)
         {
-            prefix=args->output_vals[args->t_id*4-1];
+            prefix=args->output_vals[shift-1];
         }
-        args->output_vals[shift]=args->input_vals[shift]+prefix;
-        args->output_vals[shift+1]+=prefix;
-        args->output_vals[shift+2]=args->output_vals[shift]+args->output_vals[shift+1];
-        args->output_vals[shift+3]+=prefix;
+        args->output_vals[shift]=args->op(args->input_vals[shift], prefix, args->n_loops);
+        args->output_vals[shift+1]=args->op(args->output_vals[shift+1], prefix, args->n_loops);
+        args->output_vals[shift+2]=args->op(args->input_vals[shift+2], args->output_vals[shift+1], args->n_loops);
+        args->output_vals[shift+3]=args->op(prefix, args->output_vals[shift+3], args->n_loops);
     }
     pthread_barrier_wait(args->barrier);
     return 0;
