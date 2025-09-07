@@ -52,15 +52,19 @@ int main(int argc, char **argv)
         }
     }
     else {
-        //pthread_barrier_t barrier;
-        pthread_barrier_init(&ps_args->barrier, NULL, opts.n_threads);
+        // Initialize a single shared barrier and assign its pointer to each thread arg
+        pthread_barrier_t barrier;
+        pthread_barrier_init(&barrier, NULL, opts.n_threads);
+        for (int i = 0; i < opts.n_threads; ++i) {
+            ps_args[i].barrier = &barrier;
+        }
 
         // Launch worker threads for parallel prefix scan
         start_threads(threads, opts.n_threads, ps_args, compute_prefix_sum);
 
         // Wait for threads to finish
         join_threads(threads, opts.n_threads);
-        pthread_barrier_destroy(&ps_args->barrier);
+        pthread_barrier_destroy(&barrier);
 
     }
     for(int i=0;i<ps_args->n_vals;i++)
