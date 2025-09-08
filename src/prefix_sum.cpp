@@ -6,40 +6,79 @@ void* compute_prefix_sum(void *a)
 {
     prefix_sum_args_t *args = (prefix_sum_args_t *)a;
 
-    /************************
-     * Your code here...    *
-     * or wherever you like *
-     ************************/
-    int n = args->n_vals/args->n_threads;
 
-    // z:
-    for(int j=1;j<n;j+=2)
+    const int n = args->n_vals;
+    const int n2 = next_power_of_two(n);
+    const int nThreads = args->n_threads;
+    const int tId = args->t_id;
+
+    int binSize=1;
+    if(args->n_vals>nThreads)
     {
-        int i=args->t_id*n+j;
-        args->output_vals[i] = args->op(args->input_vals[i-1], args->input_vals[i], args->n_loops);
+        binSize = args->n_vals / nThreads;
+        if(args->n_vals> (binSize*nThreads))
+            binSize = args->n_vals / (nThreads-1);
     }
-    pthread_barrier_wait(args->barrier);
-    // w:
-    for(int j=3;j<n;j+=4)
+
+
+
+    const int idx0 = tId*binSize;
+    const int idx1 = ((idx0+binSize) > (args->n_vals-1) ? (args->n_vals-1) : idx0+binSize-1);
+
+    int nLevels = 0;
+    while ((1 << nLevels) < n2) ++nLevels;
+
+    //printf("\nLevels=%d; n=%d; binSize=%d; Thread=%d, idx0=%d; idx1=%d; totalThreads=%d\n", nLevels, n, binSize, tId, idx0, idx1, nThreads);
+
+    if(tId==0)
     {
-        int i=args->t_id*n+j;
-        args->output_vals[i] = args->op(args->output_vals[i-2], args->output_vals[i], args->n_loops);     
-    }
-    pthread_barrier_wait(args->barrier);
-    // y
-    for(int j=0;j<n/4;j++)
-    {
-        int shift = j*4+args->t_id*n;
-        int prefix = 0;
-        if(shift >0)
+    for(int i=0;i<n;i++)
         {
-            prefix=args->output_vals[shift-1];
+            args->output_vals[i]=args->input_vals[i];
         }
-        args->output_vals[shift]=args->op(args->input_vals[shift], prefix, args->n_loops);
-        args->output_vals[shift+1]=args->op(args->output_vals[shift+1], prefix, args->n_loops);
-        args->output_vals[shift+2]=args->op(args->input_vals[shift+2], args->output_vals[shift+1], args->n_loops);
-        args->output_vals[shift+3]=args->op(prefix, args->output_vals[shift+3], args->n_loops);
+    }
+    pthread_barrier_wait(args->barrier);    
+    for(int lvl=1;lvl<nLevels;lvl++)
+    {
+        int step = 1 << lvl;
+        for(int i=idx0;i<=idx1;i++)
+        {
+            if((i+1)%step==0)
+            {
+                int i0 = i-step/2;
+                int val = (i0>=0 ? args->output_vals[i0]: 0);
+                args->output_vals[i] = args->op(args->output_vals[i], val, args->n_loops);
+            }
+        }
+        pthread_barrier_wait(args->barrier);
+    }
+    //printf("\n\n%d, %d, %d, %d, %d;", args->output_vals[0], args->output_vals[1], args->output_vals[2], args->output_vals[3], args->output_vals[4]);
+
+    for(int i = idx1;i>=idx0;i--)
+    {
+        int lvl = nLevels - 1;
+        int step = 1 << lvl;        
+        int acc = 0;
+        int lastFoundIdx = 0;
+        do
+        {
+            step = 1 << lvl;
+            for(int j = ((i-step)>lastFoundIdx? (i-step):lastFoundIdx); j<i; j++)
+            {
+                if((j+1)%step==0)
+                {
+                    acc = args->op(acc, args->output_vals[j], args->n_loops);
+                    lastFoundIdx = j+1;
+                    break;                    
+                }
+            }
+            lvl--;
+            step = 1 << lvl;
+        } while((i+1)%step!=0 && lvl>0);
+        args->output_vals[i] = args->op(acc, args->output_vals[i], args->n_loops);
     }
     pthread_barrier_wait(args->barrier);
+
+
     return 0;
 }

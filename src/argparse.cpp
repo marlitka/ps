@@ -15,7 +15,10 @@ void get_opts(int argc,
         exit(0);
     }
 
+    // Set sane defaults
     opts->spin = false;
+    opts->n_threads = 0; // triggers sequential path unless -n provided
+    opts->n_loops = 1;   // avoid divide-by-zero inside op unless -l provided
 
     struct option l_opts[] = {
         {"in", required_argument, NULL, 'i'},
